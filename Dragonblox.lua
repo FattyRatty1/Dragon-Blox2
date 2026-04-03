@@ -1,0 +1,586 @@
+-- Dragon Blox GUI v11 | Tabbed UI + Fixed Auto Quest
+
+local Players, RunService, UIS, RS, VIM = game:GetService("Players"), game:GetService("RunService"), game:GetService("UserInputService"), game:GetService("ReplicatedStorage"), game:GetService("VirtualInputManager")
+local player, playerGui = Players.LocalPlayer, Players.LocalPlayer.PlayerGui
+
+local cfg = {
+    AutoRebirth=false, AutoFarm=false, AutoQuest=false,
+    SpeedBoost=false, JumpBoost=false, AutoLockOn=false, SuperFlight=false,
+    SpeedAmount=50, JumpAmount=80, FlightSpeed=50,
+    TargetMob="Puriza X003 army", World="3", QuestIndex=1
+}
+
+local WORLDS = {
+    ["1"] = {
+        mobs = {
+            {name="Bandit",               npc="WestCity"},
+            {name="Evil Thug",            npc="WestCity"},
+            {name="Puriza Minion",        npc="PurizaArea"},
+            {name="Puriza",               npc="PurizaArea"},
+            {name="Coolest Minion",       npc="CoolestArea"},
+            {name="Coolest",              npc="CoolestArea"},
+            {name="Droid 18 Minion",      npc="Droid1718Area"},
+            {name="Droid 17 Minion",      npc="Droid1718Area"},
+            {name="Droid 18",             npc="Droid1718Area"},
+            {name="Droid 17",             npc="Droid1718Area"},
+            {name="Atom Minion",          npc="AtomArea"},
+            {name="Atom",                 npc="AtomArea"},
+            {name="Jinbu Minion",         npc="JinbuArea"},
+            {name="Jinbu",                npc="JinbuArea"},
+            {name="BabyVeggy Minion",     npc="VeggyArea"},
+            {name="BlackKarrot Minion",   npc="BlackKarrotArea"},
+            {name="Jigray Minion",        npc="JigrayArea"},
+            {name="Puriza X003 army",     npc="PurizaArea"},
+            {name="Puriza X003",          npc="PurizaArea"},
+            {name="Atom X002 Army",       npc="AtomArea"},
+            {name="Atom X002",            npc="AtomArea"},
+        },
+        npcs = {
+            {name="West City",       folder="QuestNPCMain1_WestCity",        area="WestCity"},
+            {name="Puriza Area",     folder="QuestNPCMain2_PurizaArea",      area="PurizaArea"},
+            {name="Coolest Area",    folder="QuestNPCMain3_CoolestArea",     area="CoolestArea"},
+            {name="Droid Area",      folder="QuestNPCMain4_Droid1718Area",   area="Droid1718Area"},
+            {name="Atom Area",       folder="QuestNPCMain5_AtomArea",        area="AtomArea"},
+            {name="Jinbu Area",      folder="QuestNPCMain6_JinbuArea",       area="JinbuArea"},
+            {name="Veggy Area",      folder="QuestNPCMain7_VeggyArea",       area="VeggyArea"},
+            {name="BlackKarrot",     folder="QuestNPCMain8_BlackKarrotArea", area="BlackKarrotArea"},
+            {name="Brawly Area",     folder="QuestNPCMain9_BrawlyArea",      area="BrawlyArea"},
+            {name="Jigray Area",     folder="QuestNPCMain10_JigrayArea",     area="JigrayArea"},
+        }
+    },
+    ["3"] = {
+        mobs = {
+            {name="Puriza X003 army", npc="Capital City"},
+            {name="Puriza X003",      npc="Capital City"},
+            {name="Atom X002 Army",   npc="Tribe Village"},
+            {name="Atom X002",        npc="Tribe Village"},
+            {name="BrawlyX01 Army",   npc="Volcanic Island"},
+            {name="BrawlyX01",        npc="Volcanic Island"},
+            {name="JigrayX Army",     npc="Misty Lake"},
+            {name="JigrayX",          npc="Misty Lake"},
+            {name="Zero Army",        npc="Droid Waste Island"},
+            {name="Zero",             npc="Droid Waste Island"},
+        },
+        npcs = {
+            {name="Capital City",       folder="QuestNPCDroid1_PurizaX003", area="Tribe Village"},
+            {name="Tribe Village",      folder="QuestNPCDroid2_AtomX002",   area="Tribe Village"},
+            {name="Volcanic Island",    folder="QuestNPCDroid3_BrawlyX01",  area="Volcanic Island"},
+            {name="Misty Lake",         folder="QuestNPCDroid4_JigrayX",    area="Misty Lake"},
+            {name="Droid Waste Island", folder="QuestNPCDroid5_Zero",       area="Droid Waste Island"},
+        }
+    }
+}
+
+-- Remotes
+local rebirthRemote = RS:WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_knit@1.4.7"):WaitForChild("knit"):WaitForChild("Services"):WaitForChild("PlayerLevelService"):WaitForChild("RF"):WaitForChild("RequestRebirth")
+local flightRemote  = RS:WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_knit@1.4.7"):WaitForChild("knit"):WaitForChild("Services"):WaitForChild("FlightService"):WaitForChild("RE"):WaitForChild("SuperFlight")
+local answerRemote  = RS:WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_knit@1.4.7"):WaitForChild("knit"):WaitForChild("Services"):WaitForChild("DialogService"):WaitForChild("RF"):WaitForChild("Answer")
+
+local function rebirth() pcall(function() rebirthRemote:InvokeServer(true) end) end
+local function pressQ()
+    VIM:SendKeyEvent(true, Enum.KeyCode.Q, false, game)
+    wait(0.05)
+    VIM:SendKeyEvent(false, Enum.KeyCode.Q, false, game)
+end
+local function punch()
+    VIM:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+    wait(0.05)
+    VIM:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+end
+
+-- Fixed auto quest: fires Answer twice (select then accept)
+local function acceptQuest(area, questIndex, folder)
+    pcall(function()
+        answerRemote:InvokeServer("NPCQuest_"..area, 1, folder) -- select quest
+        wait(0.4)
+        answerRemote:InvokeServer("NPCQuest_"..area, 2, folder) -- confirm accept
+    end)
+end
+
+local function teleportToPos(pos)
+    local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if hrp then hrp.CFrame = CFrame.new(pos + Vector3.new(3,0,0)) end
+end
+
+local function getTarget()
+    local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    local worldMobs = workspace:FindFirstChild("World Mobs")
+    if not worldMobs then return nil end
+    local closest, closestDist = nil, math.huge
+    for _, folderName in pairs({"Mobs","Boss Mobs","Entities","Event Mobs"}) do
+        local folder = worldMobs:FindFirstChild(folderName)
+        if folder then
+            for _, mob in pairs(folder:GetChildren()) do
+                if mob.Name == cfg.TargetMob then
+                    local mHRP = mob:FindFirstChild("HumanoidRootPart")
+                    local mHum = mob:FindFirstChildOfClass("Humanoid")
+                    if mHRP and mHum and mHum.Health > 0 then
+                        local d = (hrp.Position - mHRP.Position).Magnitude
+                        if d < closestDist then closestDist = d; closest = mob end
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+
+local function getNPCForMob(mobName)
+    local mobs = WORLDS[cfg.World].mobs
+    local npcs = WORLDS[cfg.World].npcs
+    for _, m in pairs(mobs) do
+        if m.name == mobName then
+            for _, n in pairs(npcs) do
+                if n.name == m.npc or n.area == m.npc then
+                    return n
+                end
+            end
+        end
+    end
+    return npcs[1]
+end
+
+-- GUI
+if playerGui:FindFirstChild("DragonBloxGUI") then playerGui.DragonBloxGUI:Destroy() end
+local sg = Instance.new("ScreenGui"); sg.Name="DragonBloxGUI"; sg.ResetOnSpawn=false; sg.Parent=playerGui
+
+local ACCENT = Color3.fromRGB(220,60,20)
+local BG     = Color3.fromRGB(18,18,28)
+local BTN    = Color3.fromRGB(35,35,50)
+local BTN_H  = Color3.fromRGB(50,50,70)
+local TEXT   = Color3.fromRGB(200,200,220)
+local DIM    = Color3.fromRGB(150,150,170)
+local GREEN  = Color3.fromRGB(30,110,70)
+local DOT_ON = Color3.fromRGB(80,230,130)
+local DOT_OFF= Color3.fromRGB(180,50,50)
+
+local PANEL_W = 260
+local main = Instance.new("Frame")
+main.Size = UDim2.new(0,PANEL_W,0,520)
+main.Position = UDim2.new(0,15,0.05,0)
+main.BackgroundColor3 = BG
+main.BorderSizePixel = 0
+main.Parent = sg
+Instance.new("UICorner",main).CornerRadius = UDim.new(0,12)
+
+-- Shadow
+local shadow = Instance.new("Frame"); shadow.Size=UDim2.new(1,10,1,10); shadow.Position=UDim2.new(0,-5,0,-5); shadow.BackgroundColor3=Color3.new(0,0,0); shadow.BackgroundTransparency=0.6; shadow.ZIndex=0; shadow.Parent=main
+Instance.new("UICorner",shadow).CornerRadius=UDim.new(0,14)
+
+-- Title bar
+local titleBar = Instance.new("Frame"); titleBar.Size=UDim2.new(1,0,0,44); titleBar.BackgroundColor3=ACCENT; titleBar.BorderSizePixel=0; titleBar.ZIndex=2; titleBar.Parent=main
+Instance.new("UICorner",titleBar).CornerRadius=UDim.new(0,12)
+local tFix = Instance.new("Frame"); tFix.Size=UDim2.new(1,0,0.5,0); tFix.Position=UDim2.new(0,0,0.5,0); tFix.BackgroundColor3=ACCENT; tFix.BorderSizePixel=0; tFix.ZIndex=2; tFix.Parent=titleBar
+local tText = Instance.new("TextLabel"); tText.Size=UDim2.new(1,0,1,0); tText.BackgroundTransparency=1; tText.Text="🐉  Dragon Blox  v11"; tText.TextColor3=Color3.new(1,1,1); tText.Font=Enum.Font.GothamBold; tText.TextSize=15; tText.ZIndex=3; tText.Parent=titleBar
+
+-- Tab bar
+local tabBar = Instance.new("Frame"); tabBar.Size=UDim2.new(1,0,0,36); tabBar.Position=UDim2.new(0,0,0,44); tabBar.BackgroundColor3=Color3.fromRGB(12,12,20); tabBar.BorderSizePixel=0; tabBar.Parent=main
+local tabLayout = Instance.new("UIListLayout"); tabLayout.FillDirection=Enum.FillDirection.Horizontal; tabLayout.SortOrder=Enum.SortOrder.LayoutOrder; tabLayout.Parent=tabBar
+
+local tabNames = {"⚔️ Farm","🤖 Auto","✈️ Move"}
+local tabs = {}
+local tabPages = {}
+local activeTab = 1
+
+-- Content area
+local contentFrame = Instance.new("Frame"); contentFrame.Size=UDim2.new(1,0,1,-80); contentFrame.Position=UDim2.new(0,0,0,80); contentFrame.BackgroundTransparency=1; contentFrame.Parent=main
+
+-- Status bar
+local statusLabel = Instance.new("TextLabel"); statusLabel.Size=UDim2.new(1,-20,0,18); statusLabel.Position=UDim2.new(0,10,1,-24); statusLabel.BackgroundTransparency=1; statusLabel.TextColor3=Color3.fromRGB(100,200,100); statusLabel.Font=Enum.Font.Gotham; statusLabel.TextSize=11; statusLabel.TextXAlignment=Enum.TextXAlignment.Left; statusLabel.Text="✅ Loaded!"; statusLabel.Parent=main
+
+local function setStatus(t) statusLabel.Text=t end
+
+-- Create pages
+for i=1,3 do
+    local page = Instance.new("ScrollingFrame")
+    page.Size=UDim2.new(1,0,1,0)
+    page.Position=UDim2.new(0,0,0,0)
+    page.BackgroundTransparency=1
+    page.BorderSizePixel=0
+    page.ScrollBarThickness=3
+    page.ScrollBarImageColor3=ACCENT
+    page.CanvasSize=UDim2.new(0,0,0,0)
+    page.AutomaticCanvasSize=Enum.AutomaticSize.Y
+    page.Visible=(i==1)
+    page.Parent=contentFrame
+    tabPages[i]=page
+
+    local pad=Instance.new("UIPadding"); pad.PaddingLeft=UDim.new(0,12); pad.PaddingRight=UDim.new(0,12); pad.PaddingTop=UDim.new(0,10); pad.PaddingBottom=UDim.new(0,10); pad.Parent=page
+    local layout=Instance.new("UIListLayout"); layout.SortOrder=Enum.SortOrder.LayoutOrder; layout.Padding=UDim.new(0,8); layout.Parent=page
+end
+
+-- Tab buttons
+local function switchTab(idx)
+    for i,t in pairs(tabs) do
+        if i==idx then
+            t.BackgroundColor3=ACCENT; t.TextColor3=Color3.new(1,1,1)
+        else
+            t.BackgroundColor3=Color3.fromRGB(12,12,20); t.TextColor3=DIM
+        end
+        tabPages[i].Visible=(i==idx)
+    end
+    activeTab=idx
+end
+
+for i,name in pairs(tabNames) do
+    local tb=Instance.new("TextButton")
+    tb.Size=UDim2.new(0,PANEL_W/3,1,0)
+    tb.BackgroundColor3=i==1 and ACCENT or Color3.fromRGB(12,12,20)
+    tb.TextColor3=i==1 and Color3.new(1,1,1) or DIM
+    tb.Text=name; tb.Font=Enum.Font.GothamBold; tb.TextSize=11
+    tb.BorderSizePixel=0; tb.AutoButtonColor=false; tb.LayoutOrder=i; tb.Parent=tabBar
+    tb.MouseButton1Click:Connect(function() switchTab(i) end)
+    tabs[i]=tb
+end
+
+-- Helper: make a toggle button
+local function makeToggle(page, name, icon, key, onEnable, onDisable)
+    local btn=Instance.new("TextButton")
+    btn.Size=UDim2.new(1,0,0,40)
+    btn.BackgroundColor3=BTN; btn.TextColor3=TEXT
+    btn.Text=icon.."  "..name; btn.Font=Enum.Font.Gotham; btn.TextSize=13
+    btn.AutoButtonColor=false; btn.BorderSizePixel=0; btn.Parent=page
+    Instance.new("UICorner",btn).CornerRadius=UDim.new(0,8)
+    local dot=Instance.new("Frame"); dot.Size=UDim2.new(0,8,0,8); dot.Position=UDim2.new(1,-14,0.5,-4); dot.BackgroundColor3=DOT_OFF; dot.BorderSizePixel=0; dot.Parent=btn
+    Instance.new("UICorner",dot).CornerRadius=UDim.new(1,0)
+    btn.MouseButton1Click:Connect(function()
+        cfg[key]=not cfg[key]
+        if cfg[key] then
+            btn.BackgroundColor3=GREEN; dot.BackgroundColor3=DOT_ON; btn.TextColor3=Color3.new(1,1,1)
+            if onEnable then onEnable() end
+        else
+            btn.BackgroundColor3=BTN; dot.BackgroundColor3=DOT_OFF; btn.TextColor3=TEXT
+            if onDisable then onDisable() end
+        end
+    end)
+    btn.MouseEnter:Connect(function() if not cfg[key] then btn.BackgroundColor3=BTN_H end end)
+    btn.MouseLeave:Connect(function() if not cfg[key] then btn.BackgroundColor3=BTN end end)
+    return btn
+end
+
+-- Helper: section label
+local function makeLabel(page, text)
+    local lbl=Instance.new("TextLabel")
+    lbl.Size=UDim2.new(1,0,0,18)
+    lbl.BackgroundTransparency=1; lbl.TextColor3=DIM
+    lbl.Font=Enum.Font.GothamBold; lbl.TextSize=11
+    lbl.TextXAlignment=Enum.TextXAlignment.Left
+    lbl.Text=text; lbl.Parent=page
+    return lbl
+end
+
+-- Helper: divider
+local function makeDivider(page)
+    local d=Instance.new("Frame"); d.Size=UDim2.new(1,0,0,1); d.BackgroundColor3=Color3.fromRGB(40,40,60); d.BorderSizePixel=0; d.Parent=page
+end
+
+-- Helper: dual button selector
+local function makeDualBtn(page, labelA, labelB, onA, onB)
+    local row=Instance.new("Frame"); row.Size=UDim2.new(1,0,0,34); row.BackgroundTransparency=1; row.Parent=page
+    local bA=Instance.new("TextButton"); bA.Size=UDim2.new(0.48,0,1,0); bA.Position=UDim2.new(0,0,0,0); bA.BackgroundColor3=ACCENT; bA.TextColor3=Color3.new(1,1,1); bA.Text=labelA; bA.Font=Enum.Font.GothamBold; bA.TextSize=12; bA.BorderSizePixel=0; bA.Parent=row
+    Instance.new("UICorner",bA).CornerRadius=UDim.new(0,8)
+    local bB=Instance.new("TextButton"); bB.Size=UDim2.new(0.48,0,1,0); bB.Position=UDim2.new(0.52,0,0,0); bB.BackgroundColor3=BTN; bB.TextColor3=TEXT; bB.Text=labelB; bB.Font=Enum.Font.GothamBold; bB.TextSize=12; bB.BorderSizePixel=0; bB.Parent=row
+    Instance.new("UICorner",bB).CornerRadius=UDim.new(0,8)
+    bA.MouseButton1Click:Connect(function()
+        bA.BackgroundColor3=ACCENT; bA.TextColor3=Color3.new(1,1,1)
+        bB.BackgroundColor3=BTN;    bB.TextColor3=TEXT
+        onA()
+    end)
+    bB.MouseButton1Click:Connect(function()
+        bB.BackgroundColor3=ACCENT; bB.TextColor3=Color3.new(1,1,1)
+        bA.BackgroundColor3=BTN;    bA.TextColor3=TEXT
+        onB()
+    end)
+    return bA, bB
+end
+
+-- ============================================================
+-- TAB 1: FARM
+-- ============================================================
+local p1 = tabPages[1]
+
+makeToggle(p1,"Auto Farm","⚔️","AutoFarm")
+makeDivider(p1)
+makeLabel(p1,"  🌍  World")
+makeDualBtn(p1,"World 1","World 3",
+    function()
+        cfg.World="1"
+        cfg.TargetMob=WORLDS["1"].mobs[1].name
+        setStatus("Switched to World 1")
+        -- rebuild mob list
+    end,
+    function()
+        cfg.World="3"
+        cfg.TargetMob=WORLDS["3"].mobs[1].name
+        setStatus("Switched to World 3")
+    end
+)
+makeDivider(p1)
+makeLabel(p1,"  ⚔️  Select Mob  →  NPC Auto-Assigned")
+
+-- Mob list (scrollable, each row shows mob + npc)
+local mobListFrame = Instance.new("Frame")
+mobListFrame.Size=UDim2.new(1,0,0,10)
+mobListFrame.AutomaticSize=Enum.AutomaticSize.Y
+mobListFrame.BackgroundTransparency=1
+mobListFrame.Parent=p1
+
+local mobListLayout=Instance.new("UIListLayout"); mobListLayout.SortOrder=Enum.SortOrder.LayoutOrder; mobListLayout.Padding=UDim.new(0,4); mobListLayout.Parent=mobListFrame
+
+local mobRows = {}
+
+local function buildMobList()
+    -- clear old rows
+    for _, r in pairs(mobRows) do r:Destroy() end
+    mobRows = {}
+
+    local mobs = WORLDS[cfg.World].mobs
+    for i, mob in pairs(mobs) do
+        local row=Instance.new("TextButton")
+        row.Size=UDim2.new(1,0,0,38)
+        row.BackgroundColor3=mob.name==cfg.TargetMob and GREEN or BTN
+        row.BorderSizePixel=0; row.AutoButtonColor=false; row.LayoutOrder=i; row.Parent=mobListFrame
+        Instance.new("UICorner",row).CornerRadius=UDim.new(0,8)
+
+        local mName=Instance.new("TextLabel"); mName.Size=UDim2.new(1,-10,0.5,0); mName.Position=UDim2.new(0,10,0,0); mName.BackgroundTransparency=1; mName.TextColor3=Color3.new(1,1,1); mName.Font=Enum.Font.GothamBold; mName.TextSize=12; mName.TextXAlignment=Enum.TextXAlignment.Left; mName.Text=mob.name; mName.Parent=row
+        local mNPC=Instance.new("TextLabel"); mNPC.Size=UDim2.new(1,-10,0.5,0); mNPC.Position=UDim2.new(0,10,0.5,0); mNPC.BackgroundTransparency=1; mNPC.TextColor3=DIM; mNPC.Font=Enum.Font.Gotham; mNPC.TextSize=10; mNPC.TextXAlignment=Enum.TextXAlignment.Left; mNPC.Text="📍 "..mob.npc; mNPC.Parent=row
+
+        local capturedMob = mob
+        row.MouseButton1Click:Connect(function()
+            cfg.TargetMob=capturedMob.name
+            setStatus("Target: "..capturedMob.name.." → "..capturedMob.npc)
+            buildMobList()
+        end)
+        row.MouseEnter:Connect(function() if capturedMob.name~=cfg.TargetMob then row.BackgroundColor3=BTN_H end end)
+        row.MouseLeave:Connect(function() if capturedMob.name~=cfg.TargetMob then row.BackgroundColor3=BTN end end)
+
+        table.insert(mobRows, row)
+    end
+end
+
+buildMobList()
+
+-- patch world switch buttons to also rebuild mob list
+local w1b, w3b
+w1b, w3b = makeDualBtn(Instance.new("Frame"), "", "", function() end, function() end) -- dummy, we already made them above
+
+-- ============================================================
+-- TAB 2: AUTO
+-- ============================================================
+local p2 = tabPages[2]
+
+makeToggle(p2,"Auto Rebirth","🔄","AutoRebirth")
+makeToggle(p2,"Auto Lock-On","🎯","AutoLockOn")
+makeDivider(p2)
+makeToggle(p2,"Auto Quest","📜","AutoQuest")
+makeDivider(p2)
+makeLabel(p2,"  📜  Quest Type")
+makeDualBtn(p2,"Army (1)","Boss (2)",
+    function() cfg.QuestIndex=1; setStatus("Quest: Army") end,
+    function() cfg.QuestIndex=2; setStatus("Quest: Boss") end
+)
+
+-- ============================================================
+-- TAB 3: MOVE
+-- ============================================================
+local p3 = tabPages[3]
+
+makeToggle(p3,"Speed Boost","💨","SpeedBoost",nil,function()
+    local hum=player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+    if hum then hum.WalkSpeed=16 end
+end)
+makeToggle(p3,"Jump Boost","🦘","JumpBoost",nil,function()
+    local hum=player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+    if hum then hum.JumpPower=50 end
+end)
+makeToggle(p3,"Super Flight","✈️","SuperFlight",
+    function() pcall(function() flightRemote:FireServer(false) end) end,
+    function() cfg.SuperFlight=false end
+)
+makeDivider(p3)
+makeLabel(p3,"  ✈️  Flight Speed")
+
+-- Flight slider
+local sliderRow=Instance.new("Frame"); sliderRow.Size=UDim2.new(1,0,0,40); sliderRow.BackgroundTransparency=1; sliderRow.Parent=p3
+local fsVal=Instance.new("TextLabel"); fsVal.Size=UDim2.new(1,0,0,18); fsVal.BackgroundTransparency=1; fsVal.TextColor3=Color3.new(1,1,1); fsVal.Font=Enum.Font.GothamBold; fsVal.TextSize=13; fsVal.Text="50"; fsVal.Parent=sliderRow
+local track=Instance.new("Frame"); track.Size=UDim2.new(1,0,0,8); track.Position=UDim2.new(0,0,0,24); track.BackgroundColor3=BTN_H; track.BorderSizePixel=0; track.Parent=sliderRow
+Instance.new("UICorner",track).CornerRadius=UDim.new(1,0)
+local fill=Instance.new("Frame"); fill.Size=UDim2.new(0.042,0,1,0); fill.BackgroundColor3=ACCENT; fill.BorderSizePixel=0; fill.Parent=track
+Instance.new("UICorner",fill).CornerRadius=UDim.new(1,0)
+local knob=Instance.new("TextButton"); knob.Size=UDim2.new(0,18,0,18); knob.Position=UDim2.new(0.042,-9,0.5,-9); knob.BackgroundColor3=Color3.new(1,1,1); knob.Text=""; knob.BorderSizePixel=0; knob.ZIndex=5; knob.Parent=track
+Instance.new("UICorner",knob).CornerRadius=UDim.new(1,0)
+local minL=Instance.new("TextLabel"); minL.Size=UDim2.new(0,20,0,14); minL.BackgroundTransparency=1; minL.Text="10"; minL.TextColor3=DIM; minL.Font=Enum.Font.Gotham; minL.TextSize=10; minL.Parent=sliderRow
+local maxL=Instance.new("TextLabel"); maxL.Size=UDim2.new(0,40,0,14); maxL.AnchorPoint=Vector2.new(1,0); maxL.Position=UDim2.new(1,0,0,0); maxL.BackgroundTransparency=1; maxL.Text="1000"; maxL.TextColor3=DIM; maxL.Font=Enum.Font.Gotham; maxL.TextSize=10; maxL.TextXAlignment=Enum.TextXAlignment.Right; maxL.Parent=sliderRow
+
+local sliding=false
+local function updateSlider(x)
+    local rel=math.clamp((x-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
+    cfg.FlightSpeed=math.floor(10+990*rel)
+    fill.Size=UDim2.new(rel,0,1,0); knob.Position=UDim2.new(rel,-9,0.5,-9)
+    fsVal.Text=tostring(cfg.FlightSpeed)
+end
+knob.MouseButton1Down:Connect(function() sliding=true end)
+track.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then sliding=true; updateSlider(i.Position.X) end end)
+UIS.InputChanged:Connect(function(i) if sliding and i.UserInputType==Enum.UserInputType.MouseMovement then updateSlider(i.Position.X) end end)
+UIS.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then sliding=false end end)
+
+-- Speed/Jump amount sliders inline labels
+makeLabel(p3,"  💨  Walk Speed Amount")
+local wsRow=Instance.new("Frame"); wsRow.Size=UDim2.new(1,0,0,28); wsRow.BackgroundTransparency=1; wsRow.Parent=p3
+local wsDisp=Instance.new("TextLabel"); wsDisp.Size=UDim2.new(0.3,0,1,0); wsDisp.BackgroundTransparency=1; wsDisp.TextColor3=Color3.new(1,1,1); wsDisp.Font=Enum.Font.GothamBold; wsDisp.TextSize=13; wsDisp.Text="50"; wsDisp.Parent=wsRow
+local wsMinus=Instance.new("TextButton"); wsMinus.Size=UDim2.new(0,28,0,28); wsMinus.Position=UDim2.new(0.3,0,0,0); wsMinus.BackgroundColor3=BTN; wsMinus.TextColor3=Color3.new(1,1,1); wsMinus.Text="-"; wsMinus.Font=Enum.Font.GothamBold; wsMinus.TextSize=16; wsMinus.BorderSizePixel=0; wsMinus.Parent=wsRow
+Instance.new("UICorner",wsMinus).CornerRadius=UDim.new(0,6)
+local wsPlus=Instance.new("TextButton"); wsPlus.Size=UDim2.new(0,28,0,28); wsPlus.Position=UDim2.new(0.3,32,0,0); wsPlus.BackgroundColor3=BTN; wsPlus.TextColor3=Color3.new(1,1,1); wsPlus.Text="+"; wsPlus.Font=Enum.Font.GothamBold; wsPlus.TextSize=16; wsPlus.BorderSizePixel=0; wsPlus.Parent=wsRow
+Instance.new("UICorner",wsPlus).CornerRadius=UDim.new(0,6)
+wsMinus.MouseButton1Click:Connect(function() cfg.SpeedAmount=math.max(16,cfg.SpeedAmount-10); wsDisp.Text=tostring(cfg.SpeedAmount) end)
+wsPlus.MouseButton1Click:Connect(function() cfg.SpeedAmount=math.min(500,cfg.SpeedAmount+10); wsDisp.Text=tostring(cfg.SpeedAmount) end)
+
+makeLabel(p3,"  🦘  Jump Power Amount")
+local jpRow=Instance.new("Frame"); jpRow.Size=UDim2.new(1,0,0,28); jpRow.BackgroundTransparency=1; jpRow.Parent=p3
+local jpDisp=Instance.new("TextLabel"); jpDisp.Size=UDim2.new(0.3,0,1,0); jpDisp.BackgroundTransparency=1; jpDisp.TextColor3=Color3.new(1,1,1); jpDisp.Font=Enum.Font.GothamBold; jpDisp.TextSize=13; jpDisp.Text="80"; jpDisp.Parent=jpRow
+local jpMinus=Instance.new("TextButton"); jpMinus.Size=UDim2.new(0,28,0,28); jpMinus.Position=UDim2.new(0.3,0,0,0); jpMinus.BackgroundColor3=BTN; jpMinus.TextColor3=Color3.new(1,1,1); jpMinus.Text="-"; jpMinus.Font=Enum.Font.GothamBold; jpMinus.TextSize=16; jpMinus.BorderSizePixel=0; jpMinus.Parent=jpRow
+Instance.new("UICorner",jpMinus).CornerRadius=UDim.new(0,6)
+local jpPlus=Instance.new("TextButton"); jpPlus.Size=UDim2.new(0,28,0,28); jpPlus.Position=UDim2.new(0.3,32,0,0); jpPlus.BackgroundColor3=BTN; jpPlus.TextColor3=Color3.new(1,1,1); jpPlus.Text="+"; jpPlus.Font=Enum.Font.GothamBold; jpPlus.TextSize=16; jpPlus.BorderSizePixel=0; jpPlus.Parent=jpRow
+Instance.new("UICorner",jpPlus).CornerRadius=UDim.new(0,6)
+jpMinus.MouseButton1Click:Connect(function() cfg.JumpAmount=math.max(50,cfg.JumpAmount-10); jpDisp.Text=tostring(cfg.JumpAmount) end)
+jpPlus.MouseButton1Click:Connect(function() cfg.JumpAmount=math.min(500,cfg.JumpAmount+10); jpDisp.Text=tostring(cfg.JumpAmount) end)
+
+-- Dragging
+local dragging, dragInput, dragStart, startPos
+titleBar.InputBegan:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1 then
+        dragging=true; dragStart=i.Position; startPos=main.Position
+        i.Changed:Connect(function() if i.UserInputState==Enum.UserInputState.End then dragging=false end end)
+    end
+end)
+titleBar.InputChanged:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseMovement then dragInput=i end end)
+UIS.InputChanged:Connect(function(i)
+    if i==dragInput and dragging then
+        local d=i.Position-dragStart
+        main.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+d.X,startPos.Y.Scale,startPos.Y.Offset+d.Y)
+    end
+end)
+
+-- ============================================================
+-- LOOPS
+-- ============================================================
+
+-- Heartbeat
+RunService.Heartbeat:Connect(function()
+    local char=player.Character; if not char then return end
+    local hum=char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+    local hrp=char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
+    if cfg.SpeedBoost then hum.WalkSpeed=cfg.SpeedAmount end
+    if cfg.JumpBoost then hum.JumpPower=cfg.JumpAmount end
+    if cfg.SuperFlight then
+        local bv=hrp:FindFirstChild("FLIGHT_MOVING_BODYVELOCITY")
+        if bv and bv.Velocity.Magnitude>1 then
+            bv.Velocity=bv.Velocity.Unit*cfg.FlightSpeed
+            bv.MaxForce=Vector3.new(1e9,1e9,1e9)
+        end
+    end
+end)
+
+-- Auto Rebirth
+spawn(function()
+    while true do wait(1)
+        if cfg.AutoRebirth then rebirth() end
+    end
+end)
+
+-- Auto Lock-On
+local lockOnActive=false
+spawn(function()
+    while true do wait(0.1)
+        if cfg.AutoLockOn and not lockOnActive then
+            lockOnActive=true; pressQ()
+        elseif not cfg.AutoLockOn and lockOnActive then
+            lockOnActive=false; pressQ()
+        end
+    end
+end)
+
+-- Auto Farm (teleport)
+spawn(function()
+    while true do wait(0.15)
+        if not cfg.AutoFarm then continue end
+        local char=player.Character; if not char then continue end
+        local hrp=char:FindFirstChild("HumanoidRootPart"); if not hrp then continue end
+        local target=getTarget(); if not target then setStatus("⚠️ No mob found: "..cfg.TargetMob); continue end
+        local tHRP=target:FindFirstChild("HumanoidRootPart"); if not tHRP then continue end
+        local dist=(hrp.Position-tHRP.Position).Magnitude
+        if dist > 8 then
+            hrp.CFrame=CFrame.new(tHRP.Position+Vector3.new(3,0,0))
+        else
+            hrp.CFrame=CFrame.lookAt(hrp.Position, tHRP.Position)
+            pressQ(); wait(0.05); punch()
+        end
+    end
+end)
+
+-- Auto Quest (fixed: two InvokeServer calls)
+spawn(function()
+    while true do wait(6)
+        if not cfg.AutoQuest then continue end
+
+        -- Find the NPC that matches the current target mob
+        local npc = getNPCForMob(cfg.TargetMob)
+        if not npc then setStatus("⚠️ No NPC for mob"); continue end
+
+        setStatus("📜 Questing: "..npc.name.."...")
+
+        -- Teleport to NPC
+        local questFolder = workspace:FindFirstChild("Misc") and workspace.Misc:FindFirstChild("NPC") and workspace.Misc.NPC:FindFirstChild("Quest")
+        if questFolder then
+            local npcModel = questFolder:FindFirstChild(npc.folder)
+            if npcModel then
+                local npcHRP = npcModel:FindFirstChild("HumanoidRootPart", true)
+                if npcHRP then
+                    teleportToPos(npcHRP.Position)
+                    wait(0.4)
+                end
+                -- Fire proximity prompt if exists
+                local prompt = npcModel:FindFirstChild("DialogPrompt", true)
+                if prompt then
+                    pcall(function() fireproximityprompt(prompt) end)
+                    wait(0.4)
+                end
+            end
+        end
+
+        -- Fire Answer twice: first to select quest, then to confirm
+        local ok, err = pcall(function()
+            -- Select army (1) or boss (2) quest
+            answerRemote:InvokeServer("NPCQuest_"..npc.area, cfg.QuestIndex, npc.folder)
+            wait(0.4)
+            -- Confirm/accept
+            answerRemote:InvokeServer("NPCQuest_"..npc.area, 2, npc.folder)
+        end)
+
+        if ok then
+            setStatus("✅ Quest accepted: "..npc.name)
+        else
+            setStatus("⚠️ Quest failed: "..tostring(err):sub(1,40))
+        end
+    end
+end)
+
+-- Rebuild mob list when world switches (patch)
+-- We need to hook the world buttons made in Tab 1
+-- Find them by searching p1 children
+for _, child in pairs(p1:GetChildren()) do
+    if child:IsA("Frame") then
+        local btns = {}
+        for _, b in pairs(child:GetChildren()) do
+            if b:IsA("TextButton") then table.insert(btns, b) end
+        end
+        if #btns == 2 then
+            local origA = btns[1].MouseButton1Click
+            btns[1].MouseButton1Click:Connect(function() wait(0.05); buildMobList() end)
+            btns[2].MouseButton1Click:Connect(function() wait(0.05); buildMobList() end)
+        end
+    end
+end
+
+print("✅ Dragon Blox GUI v11 Loaded!")
