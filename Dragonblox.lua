@@ -1,4 +1,4 @@
--- Dragon Blox GUI v13 | Quest built into AutoFarm, reliable kill counter
+-- Dragon Blox GUI v14 | Fixed memory leak, no Humanoid.Died connections
 
 local Players, RunService, UIS, RS, VIM = game:GetService("Players"), game:GetService("RunService"), game:GetService("UserInputService"), game:GetService("ReplicatedStorage"), game:GetService("VirtualInputManager")
 local player, playerGui = Players.LocalPlayer, Players.LocalPlayer.PlayerGui
@@ -7,7 +7,7 @@ local cfg = {
     AutoRebirth=false, AutoFarm=false,
     SpeedBoost=false, JumpBoost=false, AutoLockOn=false, SuperFlight=false,
     SpeedAmount=50, JumpAmount=80, FlightSpeed=50,
-    TargetMob=nil, World="3", QuestIndex=1,
+    TargetMob="Atom X002 Army", World="3", QuestIndex=1,
     MobsKilled=0, QuestTarget=5
 }
 
@@ -89,7 +89,6 @@ local function punch()
 end
 
 local function getNPCForMob(mobName)
-    if not mobName then return nil end
     for _, m in pairs(WORLDS[cfg.World].mobs) do
         if m.name == mobName then
             for _, n in pairs(WORLDS[cfg.World].npcs) do
@@ -97,7 +96,7 @@ local function getNPCForMob(mobName)
             end
         end
     end
-    return nil
+    return WORLDS[cfg.World].npcs[1]
 end
 
 local function teleportToPos(pos)
@@ -106,7 +105,6 @@ local function teleportToPos(pos)
 end
 
 local function getTarget()
-    if not cfg.TargetMob then return nil end
     local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
     if not hrp then return nil end
     local worldMobs = workspace:FindFirstChild("World Mobs")
@@ -130,66 +128,45 @@ local function getTarget()
     return closest
 end
 
-local function getNPCModel(npc)
+local function teleportToNPC(npc)
     local questFolder = workspace:FindFirstChild("Misc")
         and workspace.Misc:FindFirstChild("NPC")
         and workspace.Misc.NPC:FindFirstChild("Quest")
-    if not questFolder then return nil end
-    return questFolder:FindFirstChild(npc.folder)
-end
-
-local function teleportToNPC(npc)
-    local npcModel = getNPCModel(npc)
-    if not npcModel then return end
-    local npcHRP = npcModel:FindFirstChild("HumanoidRootPart", true)
-    if npcHRP then
-        teleportToPos(npcHRP.Position)
-        wait(0.5)
+    if questFolder then
+        local npcModel = questFolder:FindFirstChild(npc.folder)
+        if npcModel then
+            local npcHRP = npcModel:FindFirstChild("HumanoidRootPart", true)
+            if npcHRP then
+                teleportToPos(npcHRP.Position)
+                wait(0.5)
+            end
+        end
     end
 end
 
 local function doQuest(npc)
-    local npcModel = getNPCModel(npc)
-    if not npcModel then return end
     pcall(function()
-        answerRemote:InvokeServer("NPCQuest_"..npc.area, cfg.QuestIndex, npcModel)
+        answerRemote:InvokeServer("NPCQuest_"..npc.area, cfg.QuestIndex, npc.folder)
         wait(0.4)
-        answerRemote:InvokeServer("NPCQuest_"..npc.area, 2, npcModel)
+        answerRemote:InvokeServer("NPCQuest_"..npc.area, 2, npc.folder)
     end)
 end
 
--- Reliable kill counter using Humanoid.Died
-local watchedMobs = {}
-local function watchMob(mob)
-    if watchedMobs[mob] then return end
-    watchedMobs[mob] = true
-    local hum = mob:FindFirstChildOfClass("Humanoid")
-    if hum then
-        hum.Died:Connect(function()
-            watchedMobs[mob] = nil
-            if cfg.AutoFarm and cfg.TargetMob and mob.Name == cfg.TargetMob then
-                cfg.MobsKilled = cfg.MobsKilled + 1
-                setStatus("⚔️ Killed "..cfg.MobsKilled.."/"..cfg.QuestTarget.." "..cfg.TargetMob)
-            end
-        end)
-    end
-end
+-- Kill detection without any persistent connections
+local lastTargetHealth = {}
 
-local function startWatchingMobs()
-    if not cfg.TargetMob then return end
-    local worldMobs = workspace:FindFirstChild("World Mobs")
-    if not worldMobs then return end
-    for _, folder in pairs(worldMobs:GetChildren()) do
-        for _, mob in pairs(folder:GetChildren()) do
-            if mob.Name == cfg.TargetMob then watchMob(mob) end
+local function checkKill(mob)
+    local hum = mob:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    local id = tostring(mob)
+    if lastTargetHealth[id] and lastTargetHealth[id] > 0 and hum.Health <= 0 then
+        lastTargetHealth[id] = nil
+        if cfg.AutoFarm and mob.Name == cfg.TargetMob then
+            cfg.MobsKilled = cfg.MobsKilled + 1
         end
-        folder.ChildAdded:Connect(function(mob)
-            if mob.Name == cfg.TargetMob then
-                wait(0.1)
-                watchMob(mob)
-            end
-        end)
+        return
     end
+    lastTargetHealth[id] = hum.Health
 end
 
 -- GUI
@@ -221,7 +198,7 @@ Instance.new("UICorner",shadow).CornerRadius=UDim.new(0,14)
 local titleBar = Instance.new("Frame"); titleBar.Size=UDim2.new(1,0,0,44); titleBar.BackgroundColor3=ACCENT; titleBar.BorderSizePixel=0; titleBar.ZIndex=2; titleBar.Parent=main
 Instance.new("UICorner",titleBar).CornerRadius=UDim.new(0,12)
 local tFix = Instance.new("Frame"); tFix.Size=UDim2.new(1,0,0.5,0); tFix.Position=UDim2.new(0,0,0.5,0); tFix.BackgroundColor3=ACCENT; tFix.BorderSizePixel=0; tFix.ZIndex=2; tFix.Parent=titleBar
-local tText = Instance.new("TextLabel"); tText.Size=UDim2.new(1,0,1,0); tText.BackgroundTransparency=1; tText.Text="🐉  Dragon Blox  v13"; tText.TextColor3=Color3.new(1,1,1); tText.Font=Enum.Font.GothamBold; tText.TextSize=15; tText.ZIndex=3; tText.Parent=titleBar
+local tText = Instance.new("TextLabel"); tText.Size=UDim2.new(1,0,1,0); tText.BackgroundTransparency=1; tText.Text="🐉  Dragon Blox  v14"; tText.TextColor3=Color3.new(1,1,1); tText.Font=Enum.Font.GothamBold; tText.TextSize=15; tText.ZIndex=3; tText.Parent=titleBar
 
 local tabBar = Instance.new("Frame"); tabBar.Size=UDim2.new(1,0,0,36); tabBar.Position=UDim2.new(0,0,0,44); tabBar.BackgroundColor3=Color3.fromRGB(12,12,20); tabBar.BorderSizePixel=0; tabBar.Parent=main
 Instance.new("UIListLayout",tabBar).FillDirection=Enum.FillDirection.Horizontal
@@ -229,7 +206,7 @@ Instance.new("UIListLayout",tabBar).FillDirection=Enum.FillDirection.Horizontal
 local tabs, tabPages = {}, {}
 local contentFrame = Instance.new("Frame"); contentFrame.Size=UDim2.new(1,0,1,-80); contentFrame.Position=UDim2.new(0,0,0,80); contentFrame.BackgroundTransparency=1; contentFrame.Parent=main
 
-local statusLabel = Instance.new("TextLabel"); statusLabel.Size=UDim2.new(1,-20,0,18); statusLabel.Position=UDim2.new(0,10,1,-24); statusLabel.BackgroundTransparency=1; statusLabel.TextColor3=Color3.fromRGB(100,200,100); statusLabel.Font=Enum.Font.Gotham; statusLabel.TextSize=11; statusLabel.TextXAlignment=Enum.TextXAlignment.Left; statusLabel.Text="✅ Loaded! Select a mob to begin."; statusLabel.Parent=main
+local statusLabel = Instance.new("TextLabel"); statusLabel.Size=UDim2.new(1,-20,0,18); statusLabel.Position=UDim2.new(0,10,1,-24); statusLabel.BackgroundTransparency=1; statusLabel.TextColor3=Color3.fromRGB(100,200,100); statusLabel.Font=Enum.Font.Gotham; statusLabel.TextSize=11; statusLabel.TextXAlignment=Enum.TextXAlignment.Left; statusLabel.Text="✅ Loaded!"; statusLabel.Parent=main
 local function setStatus(t) statusLabel.Text=t end
 
 for i=1,3 do
@@ -240,7 +217,7 @@ for i=1,3 do
     page.Visible=(i==1); page.Parent=contentFrame
     tabPages[i]=page
     local pad=Instance.new("UIPadding"); pad.PaddingLeft=UDim.new(0,12); pad.PaddingRight=UDim.new(0,12); pad.PaddingTop=UDim.new(0,10); pad.PaddingBottom=UDim.new(0,10); pad.Parent=page
-    local layout=Instance.new("UIListLayout"); layout.SortOrder=Enum.SortOrder.LayoutOrder; layout.Padding=UDim.new(0,8); layout.Parent=page
+    Instance.new("UIListLayout",page).SortOrder=Enum.SortOrder.LayoutOrder
 end
 
 local function switchTab(idx)
@@ -311,16 +288,8 @@ end
 -- ============================================================
 local p1 = tabPages[1]
 makeToggle(p1,"Auto Farm","⚔️","AutoFarm",
-    function()
-        if not cfg.TargetMob then
-            cfg.AutoFarm=false
-            setStatus("⚠️ Select a mob first!")
-            return
-        end
-        cfg.MobsKilled=0
-        startWatchingMobs()
-    end,
-    function() cfg.MobsKilled=0 end
+    function() cfg.MobsKilled=0; lastTargetHealth={} end,
+    function() cfg.MobsKilled=0; lastTargetHealth={} end
 )
 makeDivider(p1)
 makeLabel(p1,"  🌍  World")
@@ -335,7 +304,7 @@ makeDivider(p1)
 makeLabel(p1,"  ⚔️  Select Mob  →  Quest Auto-Handled")
 
 local mobListFrame=Instance.new("Frame"); mobListFrame.Size=UDim2.new(1,0,0,10); mobListFrame.AutomaticSize=Enum.AutomaticSize.Y; mobListFrame.BackgroundTransparency=1; mobListFrame.Parent=p1
-local mlLayout=Instance.new("UIListLayout"); mlLayout.SortOrder=Enum.SortOrder.LayoutOrder; mlLayout.Padding=UDim.new(0,4); mlLayout.Parent=mobListFrame
+Instance.new("UIListLayout",mobListFrame).Padding=UDim.new(0,4)
 local mobRows={}
 
 local function buildMobList()
@@ -343,8 +312,7 @@ local function buildMobList()
     mobRows={}
     for i,mob in pairs(WORLDS[cfg.World].mobs) do
         local row=Instance.new("TextButton")
-        row.Size=UDim2.new(1,0,0,38)
-        row.BackgroundColor3=mob.name==cfg.TargetMob and GREEN or BTN
+        row.Size=UDim2.new(1,0,0,38); row.BackgroundColor3=mob.name==cfg.TargetMob and GREEN or BTN
         row.BorderSizePixel=0; row.AutoButtonColor=false; row.LayoutOrder=i; row.Parent=mobListFrame
         Instance.new("UICorner",row).CornerRadius=UDim.new(0,8)
         local mName=Instance.new("TextLabel"); mName.Size=UDim2.new(1,-10,0.5,0); mName.Position=UDim2.new(0,10,0,0); mName.BackgroundTransparency=1; mName.TextColor3=Color3.new(1,1,1); mName.Font=Enum.Font.GothamBold; mName.TextSize=12; mName.TextXAlignment=Enum.TextXAlignment.Left; mName.Text=mob.name; mName.Parent=row
@@ -352,8 +320,7 @@ local function buildMobList()
         local capturedMob=mob
         row.MouseButton1Click:Connect(function()
             cfg.TargetMob=capturedMob.name; cfg.MobsKilled=0
-            watchedMobs={}
-            if cfg.AutoFarm then startWatchingMobs() end
+            lastTargetHealth={}
             setStatus("Target: "..capturedMob.name.." → "..capturedMob.npc)
             buildMobList()
         end)
@@ -364,11 +331,11 @@ local function buildMobList()
 end
 
 local function switchWorld(w, btnOn, btnOff)
-    cfg.World=w; cfg.TargetMob=nil; cfg.MobsKilled=0
-    watchedMobs={}
+    cfg.World=w; cfg.TargetMob=WORLDS[w].mobs[1].name; cfg.MobsKilled=0
+    lastTargetHealth={}
     btnOn.BackgroundColor3=ACCENT; btnOn.TextColor3=Color3.new(1,1,1)
     btnOff.BackgroundColor3=BTN; btnOff.TextColor3=TEXT
-    buildMobList(); setStatus("Switched to World "..w.." — select a mob")
+    buildMobList(); setStatus("Switched to World "..w)
 end
 
 wbA.MouseButton1Click:Connect(function() switchWorld("1",wbA,wbB) end)
@@ -489,6 +456,30 @@ spawn(function()
     end
 end)
 
+-- Clean up lastTargetHealth table periodically to prevent it growing too large
+spawn(function()
+    while true do wait(30)
+        local worldMobs = workspace:FindFirstChild("World Mobs")
+        if worldMobs then
+            local activeMobs = {}
+            for _, folderName in pairs({"Mobs","Boss Mobs","Entities","Event Mobs"}) do
+                local folder = worldMobs:FindFirstChild(folderName)
+                if folder then
+                    for _, mob in pairs(folder:GetChildren()) do
+                        activeMobs[tostring(mob)] = true
+                    end
+                end
+            end
+            -- Remove entries for mobs that no longer exist
+            for id in pairs(lastTargetHealth) do
+                if not activeMobs[id] then
+                    lastTargetHealth[id] = nil
+                end
+            end
+        end
+    end
+end)
+
 local lockOnActive=false
 spawn(function()
     while true do wait(0.1)
@@ -500,28 +491,26 @@ spawn(function()
     end
 end)
 
--- Main farm + quest loop
-local questInProgress = false
+local questInProgress=false
 spawn(function()
     while true do wait(0.15)
-        if not cfg.AutoFarm or not cfg.TargetMob then questInProgress=false; continue end
+        if not cfg.AutoFarm then questInProgress=false; continue end
         local char=player.Character; if not char then continue end
         local hrp=char:FindFirstChild("HumanoidRootPart"); if not hrp then continue end
 
         if cfg.MobsKilled >= cfg.QuestTarget and not questInProgress then
-            questInProgress = true
-            local npc = getNPCForMob(cfg.TargetMob)
+            questInProgress=true
+            local npc=getNPCForMob(cfg.TargetMob)
             if npc then
                 setStatus("📜 "..cfg.MobsKilled.." kills! Going to "..npc.name.."...")
                 teleportToNPC(npc)
                 doQuest(npc)
-                cfg.MobsKilled = 0
-                watchedMobs = {}
-                startWatchingMobs()
+                cfg.MobsKilled=0
+                lastTargetHealth={}
                 setStatus("✅ Quest done! Farming again...")
                 wait(0.5)
             end
-            questInProgress = false
+            questInProgress=false
             continue
         end
 
@@ -536,9 +525,10 @@ spawn(function()
             hrp.CFrame=CFrame.new(tHRP.Position+Vector3.new(3,0,0))
         else
             hrp.CFrame=CFrame.lookAt(hrp.Position, tHRP.Position)
+            checkKill(target)
             pressQ(); wait(0.05); punch()
         end
     end
 end)
 
-print("✅ Dragon Blox GUI v13 Loaded!")
+print("✅ Dragon Blox GUI v14 Loaded!")
