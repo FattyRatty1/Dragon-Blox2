@@ -1,10 +1,10 @@
--- Dragon Blox GUI v14 | Fixed memory leak, no Humanoid.Died connections
+-- Dragon Blox GUI v15 | Fixed kill counter with AncestryChanged
 
 local Players, RunService, UIS, RS, VIM = game:GetService("Players"), game:GetService("RunService"), game:GetService("UserInputService"), game:GetService("ReplicatedStorage"), game:GetService("VirtualInputManager")
 local player, playerGui = Players.LocalPlayer, Players.LocalPlayer.PlayerGui
 
 local cfg = {
-    AutoRebirth=false, AutoFarm=false,
+    AutoRebirth=false, AutoFarm=false, GodMode=false, AutoHeal=false,
     SpeedBoost=false, JumpBoost=false, AutoLockOn=false, SuperFlight=false,
     SpeedAmount=50, JumpAmount=80, FlightSpeed=50,
     TargetMob="Atom X002 Army", World="3", QuestIndex=1,
@@ -152,21 +152,21 @@ local function doQuest(npc)
     end)
 end
 
--- Kill detection without any persistent connections
-local lastTargetHealth = {}
+-- Kill tracking using AncestryChanged (instant, no missed kills)
+local trackedMobs = {}
 
-local function checkKill(mob)
-    local hum = mob:FindFirstChildOfClass("Humanoid")
-    if not hum then return end
+local function trackTarget(mob)
     local id = tostring(mob)
-    if lastTargetHealth[id] and lastTargetHealth[id] > 0 and hum.Health <= 0 then
-        lastTargetHealth[id] = nil
-        if cfg.AutoFarm and mob.Name == cfg.TargetMob then
-            cfg.MobsKilled = cfg.MobsKilled + 1
+    if trackedMobs[id] then return end
+    trackedMobs[id] = true
+    mob.AncestryChanged:Connect(function(_, parent)
+        if parent == nil then
+            trackedMobs[id] = nil
+            if cfg.AutoFarm and mob.Name == cfg.TargetMob then
+                cfg.MobsKilled = cfg.MobsKilled + 1
+            end
         end
-        return
-    end
-    lastTargetHealth[id] = hum.Health
+    end)
 end
 
 -- GUI
@@ -198,7 +198,7 @@ Instance.new("UICorner",shadow).CornerRadius=UDim.new(0,14)
 local titleBar = Instance.new("Frame"); titleBar.Size=UDim2.new(1,0,0,44); titleBar.BackgroundColor3=ACCENT; titleBar.BorderSizePixel=0; titleBar.ZIndex=2; titleBar.Parent=main
 Instance.new("UICorner",titleBar).CornerRadius=UDim.new(0,12)
 local tFix = Instance.new("Frame"); tFix.Size=UDim2.new(1,0,0.5,0); tFix.Position=UDim2.new(0,0,0.5,0); tFix.BackgroundColor3=ACCENT; tFix.BorderSizePixel=0; tFix.ZIndex=2; tFix.Parent=titleBar
-local tText = Instance.new("TextLabel"); tText.Size=UDim2.new(1,0,1,0); tText.BackgroundTransparency=1; tText.Text="🐉  Dragon Blox  v14"; tText.TextColor3=Color3.new(1,1,1); tText.Font=Enum.Font.GothamBold; tText.TextSize=15; tText.ZIndex=3; tText.Parent=titleBar
+local tText = Instance.new("TextLabel"); tText.Size=UDim2.new(1,0,1,0); tText.BackgroundTransparency=1; tText.Text="🐉  Dragon Blox  v15"; tText.TextColor3=Color3.new(1,1,1); tText.Font=Enum.Font.GothamBold; tText.TextSize=15; tText.ZIndex=3; tText.Parent=titleBar
 
 local tabBar = Instance.new("Frame"); tabBar.Size=UDim2.new(1,0,0,36); tabBar.Position=UDim2.new(0,0,0,44); tabBar.BackgroundColor3=Color3.fromRGB(12,12,20); tabBar.BorderSizePixel=0; tabBar.Parent=main
 Instance.new("UIListLayout",tabBar).FillDirection=Enum.FillDirection.Horizontal
@@ -288,8 +288,8 @@ end
 -- ============================================================
 local p1 = tabPages[1]
 makeToggle(p1,"Auto Farm","⚔️","AutoFarm",
-    function() cfg.MobsKilled=0; lastTargetHealth={} end,
-    function() cfg.MobsKilled=0; lastTargetHealth={} end
+    function() cfg.MobsKilled=0; trackedMobs={} end,
+    function() cfg.MobsKilled=0; trackedMobs={} end
 )
 makeDivider(p1)
 makeLabel(p1,"  🌍  World")
@@ -320,7 +320,7 @@ local function buildMobList()
         local capturedMob=mob
         row.MouseButton1Click:Connect(function()
             cfg.TargetMob=capturedMob.name; cfg.MobsKilled=0
-            lastTargetHealth={}
+            trackedMobs={}
             setStatus("Target: "..capturedMob.name.." → "..capturedMob.npc)
             buildMobList()
         end)
@@ -332,7 +332,7 @@ end
 
 local function switchWorld(w, btnOn, btnOff)
     cfg.World=w; cfg.TargetMob=WORLDS[w].mobs[1].name; cfg.MobsKilled=0
-    lastTargetHealth={}
+    trackedMobs={}
     btnOn.BackgroundColor3=ACCENT; btnOn.TextColor3=Color3.new(1,1,1)
     btnOff.BackgroundColor3=BTN; btnOff.TextColor3=TEXT
     buildMobList(); setStatus("Switched to World "..w)
@@ -348,6 +348,8 @@ buildMobList()
 local p2=tabPages[2]
 makeToggle(p2,"Auto Rebirth","🔄","AutoRebirth")
 makeToggle(p2,"Auto Lock-On","🎯","AutoLockOn")
+makeToggle(p2,"God Mode","💀","GodMode")
+makeToggle(p2,"Auto Heal (press V first)","💚","AutoHeal")
 makeDivider(p2)
 makeLabel(p2,"  📜  Quest Type")
 makeDualBtn(p2,"Army (5 kills)","Boss (1 kill)",
@@ -441,6 +443,7 @@ RunService.Heartbeat:Connect(function()
     local hrp=char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
     if cfg.SpeedBoost then hum.WalkSpeed=cfg.SpeedAmount end
     if cfg.JumpBoost then hum.JumpPower=cfg.JumpAmount end
+    if cfg.GodMode then hum.Health=hum.MaxHealth end
     if cfg.SuperFlight then
         local bv=hrp:FindFirstChild("FLIGHT_MOVING_BODYVELOCITY")
         if bv and bv.Velocity.Magnitude>1 then
@@ -456,26 +459,13 @@ spawn(function()
     end
 end)
 
--- Clean up lastTargetHealth table periodically to prevent it growing too large
+-- Auto Heal spam (press V once to activate, then toggle in GUI)
 spawn(function()
-    while true do wait(30)
-        local worldMobs = workspace:FindFirstChild("World Mobs")
-        if worldMobs then
-            local activeMobs = {}
-            for _, folderName in pairs({"Mobs","Boss Mobs","Entities","Event Mobs"}) do
-                local folder = worldMobs:FindFirstChild(folderName)
-                if folder then
-                    for _, mob in pairs(folder:GetChildren()) do
-                        activeMobs[tostring(mob)] = true
-                    end
-                end
-            end
-            -- Remove entries for mobs that no longer exist
-            for id in pairs(lastTargetHealth) do
-                if not activeMobs[id] then
-                    lastTargetHealth[id] = nil
-                end
-            end
+    while true do wait(0.1)
+        if cfg.AutoHeal then
+            VIM:SendKeyEvent(true, Enum.KeyCode.V, false, game)
+            wait(0.05)
+            VIM:SendKeyEvent(false, Enum.KeyCode.V, false, game)
         end
     end
 end)
@@ -506,7 +496,7 @@ spawn(function()
                 teleportToNPC(npc)
                 doQuest(npc)
                 cfg.MobsKilled=0
-                lastTargetHealth={}
+                trackedMobs={}
                 setStatus("✅ Quest done! Farming again...")
                 wait(0.5)
             end
@@ -525,10 +515,10 @@ spawn(function()
             hrp.CFrame=CFrame.new(tHRP.Position+Vector3.new(3,0,0))
         else
             hrp.CFrame=CFrame.lookAt(hrp.Position, tHRP.Position)
-            checkKill(target)
+            trackTarget(target)
             pressQ(); wait(0.05); punch()
         end
     end
 end)
 
-print("✅ Dragon Blox GUI v14 Loaded!")
+print("✅ Dragon Blox GUI v15 Loaded!")
