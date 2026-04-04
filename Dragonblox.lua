@@ -1,10 +1,10 @@
--- Dragon Blox GUI v12 | Fixed Quest Farm Loop
+-- Dragon Blox GUI v13 | Quest built into AutoFarm, reliable kill counter
 
 local Players, RunService, UIS, RS, VIM = game:GetService("Players"), game:GetService("RunService"), game:GetService("UserInputService"), game:GetService("ReplicatedStorage"), game:GetService("VirtualInputManager")
 local player, playerGui = Players.LocalPlayer, Players.LocalPlayer.PlayerGui
 
 local cfg = {
-    AutoRebirth=false, AutoFarm=false, AutoQuest=false,
+    AutoRebirth=false, AutoFarm=false,
     SpeedBoost=false, JumpBoost=false, AutoLockOn=false, SuperFlight=false,
     SpeedAmount=50, JumpAmount=80, FlightSpeed=50,
     TargetMob="Atom X002 Army", World="3", QuestIndex=1,
@@ -77,13 +77,11 @@ local flightRemote  = RS:WaitForChild("Packages"):WaitForChild("_Index"):WaitFor
 local answerRemote  = RS:WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_knit@1.4.7"):WaitForChild("knit"):WaitForChild("Services"):WaitForChild("DialogService"):WaitForChild("RF"):WaitForChild("Answer")
 
 local function rebirth() pcall(function() rebirthRemote:InvokeServer(true) end) end
-
 local function pressQ()
     VIM:SendKeyEvent(true, Enum.KeyCode.Q, false, game)
     wait(0.05)
     VIM:SendKeyEvent(false, Enum.KeyCode.Q, false, game)
 end
-
 local function punch()
     VIM:SendMouseButtonEvent(0, 0, 0, true, game, 1)
     wait(0.05)
@@ -91,11 +89,9 @@ local function punch()
 end
 
 local function getNPCForMob(mobName)
-    local mobs = WORLDS[cfg.World].mobs
-    local npcs = WORLDS[cfg.World].npcs
-    for _, m in pairs(mobs) do
+    for _, m in pairs(WORLDS[cfg.World].mobs) do
         if m.name == mobName then
-            for _, n in pairs(npcs) do
+            for _, n in pairs(WORLDS[cfg.World].npcs) do
                 if n.name == m.npc then return n end
             end
         end
@@ -132,6 +128,22 @@ local function getTarget()
     return closest
 end
 
+local function teleportToNPC(npc)
+    local questFolder = workspace:FindFirstChild("Misc")
+        and workspace.Misc:FindFirstChild("NPC")
+        and workspace.Misc.NPC:FindFirstChild("Quest")
+    if questFolder then
+        local npcModel = questFolder:FindFirstChild(npc.folder)
+        if npcModel then
+            local npcHRP = npcModel:FindFirstChild("HumanoidRootPart", true)
+            if npcHRP then
+                teleportToPos(npcHRP.Position)
+                wait(0.5)
+            end
+        end
+    end
+end
+
 local function doQuest(npc)
     pcall(function()
         answerRemote:InvokeServer("NPCQuest_"..npc.area, cfg.QuestIndex, npc.folder)
@@ -140,19 +152,37 @@ local function doQuest(npc)
     end)
 end
 
-local function teleportToNPC(npc)
-    local questFolder = workspace:FindFirstChild("Misc")
-        and workspace.Misc:FindFirstChild("NPC")
-        and workspace.Misc.NPC:FindFirstChild("Quest")
-    if questFolder then
-        local npcModel = questFolder:FindFirstChild(npc.folder)
-        if npcModel then
-            local npcHRP = npcModel:FindFirstChildOfClass("Model") and npcModel:FindFirstChild("HumanoidRootPart",true) or npcModel:FindFirstChild("HumanoidRootPart")
-            if npcHRP then
-                teleportToPos(npcHRP.Position)
-                wait(0.5)
+-- Reliable kill counter using Humanoid.Died
+local watchedMobs = {}
+local function watchMob(mob)
+    if watchedMobs[mob] then return end
+    watchedMobs[mob] = true
+    local hum = mob:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.Died:Connect(function()
+            watchedMobs[mob] = nil
+            if cfg.AutoFarm and mob.Name == cfg.TargetMob then
+                cfg.MobsKilled = cfg.MobsKilled + 1
+                setStatus("⚔️ Killed "..cfg.MobsKilled.."/"..cfg.QuestTarget.." "..cfg.TargetMob)
             end
+        end)
+    end
+end
+
+-- Watch all existing and new mobs
+local function startWatchingMobs()
+    local worldMobs = workspace:FindFirstChild("World Mobs")
+    if not worldMobs then return end
+    for _, folder in pairs(worldMobs:GetChildren()) do
+        for _, mob in pairs(folder:GetChildren()) do
+            if mob.Name == cfg.TargetMob then watchMob(mob) end
         end
+        folder.ChildAdded:Connect(function(mob)
+            if mob.Name == cfg.TargetMob then
+                wait(0.1) -- let humanoid load
+                watchMob(mob)
+            end
+        end)
     end
 end
 
@@ -185,7 +215,7 @@ Instance.new("UICorner",shadow).CornerRadius=UDim.new(0,14)
 local titleBar = Instance.new("Frame"); titleBar.Size=UDim2.new(1,0,0,44); titleBar.BackgroundColor3=ACCENT; titleBar.BorderSizePixel=0; titleBar.ZIndex=2; titleBar.Parent=main
 Instance.new("UICorner",titleBar).CornerRadius=UDim.new(0,12)
 local tFix = Instance.new("Frame"); tFix.Size=UDim2.new(1,0,0.5,0); tFix.Position=UDim2.new(0,0,0.5,0); tFix.BackgroundColor3=ACCENT; tFix.BorderSizePixel=0; tFix.ZIndex=2; tFix.Parent=titleBar
-local tText = Instance.new("TextLabel"); tText.Size=UDim2.new(1,0,1,0); tText.BackgroundTransparency=1; tText.Text="🐉  Dragon Blox  v12"; tText.TextColor3=Color3.new(1,1,1); tText.Font=Enum.Font.GothamBold; tText.TextSize=15; tText.ZIndex=3; tText.Parent=titleBar
+local tText = Instance.new("TextLabel"); tText.Size=UDim2.new(1,0,1,0); tText.BackgroundTransparency=1; tText.Text="🐉  Dragon Blox  v13"; tText.TextColor3=Color3.new(1,1,1); tText.Font=Enum.Font.GothamBold; tText.TextSize=15; tText.ZIndex=3; tText.Parent=titleBar
 
 local tabBar = Instance.new("Frame"); tabBar.Size=UDim2.new(1,0,0,36); tabBar.Position=UDim2.new(0,0,0,44); tabBar.BackgroundColor3=Color3.fromRGB(12,12,20); tabBar.BorderSizePixel=0; tabBar.Parent=main
 Instance.new("UIListLayout",tabBar).FillDirection=Enum.FillDirection.Horizontal
@@ -204,7 +234,7 @@ for i=1,3 do
     page.Visible=(i==1); page.Parent=contentFrame
     tabPages[i]=page
     local pad=Instance.new("UIPadding"); pad.PaddingLeft=UDim.new(0,12); pad.PaddingRight=UDim.new(0,12); pad.PaddingTop=UDim.new(0,10); pad.PaddingBottom=UDim.new(0,10); pad.Parent=page
-    local layout=Instance.new("UIListLayout"); layout.SortOrder=Enum.SortOrder.LayoutOrder; layout.Padding=UDim.new(0,8); layout.Parent=page
+    Instance.new("UIListLayout",page).SortOrder=Enum.SortOrder.LayoutOrder
 end
 
 local function switchTab(idx)
@@ -274,7 +304,10 @@ end
 -- TAB 1: FARM
 -- ============================================================
 local p1 = tabPages[1]
-makeToggle(p1,"Auto Farm","⚔️","AutoFarm")
+makeToggle(p1,"Auto Farm","⚔️","AutoFarm",
+    function() cfg.MobsKilled=0; startWatchingMobs() end,
+    function() cfg.MobsKilled=0 end
+)
 makeDivider(p1)
 makeLabel(p1,"  🌍  World")
 
@@ -285,10 +318,10 @@ local wbB=Instance.new("TextButton"); wbB.Size=UDim2.new(0.48,0,1,0); wbB.Positi
 Instance.new("UICorner",wbB).CornerRadius=UDim.new(0,8)
 
 makeDivider(p1)
-makeLabel(p1,"  ⚔️  Select Mob  →  NPC Auto-Assigned")
+makeLabel(p1,"  ⚔️  Select Mob  →  Quest Auto-Handled")
 
 local mobListFrame=Instance.new("Frame"); mobListFrame.Size=UDim2.new(1,0,0,10); mobListFrame.AutomaticSize=Enum.AutomaticSize.Y; mobListFrame.BackgroundTransparency=1; mobListFrame.Parent=p1
-local mobListLayout=Instance.new("UIListLayout"); mobListLayout.SortOrder=Enum.SortOrder.LayoutOrder; mobListLayout.Padding=UDim.new(0,4); mobListLayout.Parent=mobListFrame
+Instance.new("UIListLayout",mobListFrame).Padding=UDim.new(0,4)
 local mobRows={}
 
 local function buildMobList()
@@ -304,6 +337,8 @@ local function buildMobList()
         local capturedMob=mob
         row.MouseButton1Click:Connect(function()
             cfg.TargetMob=capturedMob.name; cfg.MobsKilled=0
+            watchedMobs={}
+            if cfg.AutoFarm then startWatchingMobs() end
             setStatus("Target: "..capturedMob.name.." → "..capturedMob.npc)
             buildMobList()
         end)
@@ -315,6 +350,7 @@ end
 
 local function switchWorld(w, btnOn, btnOff)
     cfg.World=w; cfg.TargetMob=WORLDS[w].mobs[1].name; cfg.MobsKilled=0
+    watchedMobs={}
     btnOn.BackgroundColor3=ACCENT; btnOn.TextColor3=Color3.new(1,1,1)
     btnOff.BackgroundColor3=BTN; btnOff.TextColor3=TEXT
     buildMobList(); setStatus("Switched to World "..w)
@@ -331,12 +367,10 @@ local p2=tabPages[2]
 makeToggle(p2,"Auto Rebirth","🔄","AutoRebirth")
 makeToggle(p2,"Auto Lock-On","🎯","AutoLockOn")
 makeDivider(p2)
-makeToggle(p2,"Auto Quest","📜","AutoQuest")
-makeDivider(p2)
 makeLabel(p2,"  📜  Quest Type")
-makeDualBtn(p2,"Army (1)","Boss (2)",
-    function() cfg.QuestIndex=1; cfg.MobsKilled=0; setStatus("Quest: Army (5 kills)") end,
-    function() cfg.QuestIndex=2; cfg.MobsKilled=0; setStatus("Quest: Boss") end
+makeDualBtn(p2,"Army (5 kills)","Boss (1 kill)",
+    function() cfg.QuestIndex=1; cfg.QuestTarget=5; cfg.MobsKilled=0; setStatus("Quest: Army (5 kills)") end,
+    function() cfg.QuestIndex=2; cfg.QuestTarget=1; cfg.MobsKilled=0; setStatus("Quest: Boss (1 kill)") end
 )
 
 -- ============================================================
@@ -451,62 +485,38 @@ spawn(function()
     end
 end)
 
--- Track mob deaths for quest counter
-local trackedMob = nil
-spawn(function()
-    while true do wait(0.1)
-        if not cfg.AutoFarm then trackedMob=nil; continue end
-        local target = getTarget()
-        if target and target ~= trackedMob then
-            if trackedMob then
-                -- previous mob disappeared (died), count it
-                cfg.MobsKilled = cfg.MobsKilled + 1
-                setStatus("⚔️ Killed "..cfg.MobsKilled.."/"..cfg.QuestTarget.." "..cfg.TargetMob)
-            end
-            trackedMob = target
-        elseif not target then
-            if trackedMob then
-                cfg.MobsKilled = cfg.MobsKilled + 1
-                setStatus("⚔️ Killed "..cfg.MobsKilled.."/"..cfg.QuestTarget.." "..cfg.TargetMob)
-                trackedMob = nil
-            end
-        end
-    end
-end)
-
--- Main farm + quest loop
-local questLoopRunning = false
+-- Main farm + quest loop (quest built into farm, no separate toggle)
+local questInProgress = false
 spawn(function()
     while true do wait(0.15)
-        if not cfg.AutoFarm then questLoopRunning=false; continue end
+        if not cfg.AutoFarm then questInProgress=false; continue end
         local char=player.Character; if not char then continue end
         local hrp=char:FindFirstChild("HumanoidRootPart"); if not hrp then continue end
 
-        -- If AutoQuest on and hit kill target, go turn in + reaccept
-        if cfg.AutoQuest and cfg.MobsKilled >= cfg.QuestTarget then
-            questLoopRunning=true
+        -- Quest turn-in when kill target reached
+        if cfg.MobsKilled >= cfg.QuestTarget and not questInProgress then
+            questInProgress = true
             local npc = getNPCForMob(cfg.TargetMob)
             if npc then
-                setStatus("📜 Turning in quest → "..npc.name)
+                setStatus("📜 "..cfg.MobsKilled.." kills! Going to "..npc.name.."...")
                 teleportToNPC(npc)
-                wait(0.3)
-                -- Turn in + reaccept in one go (game handles it automatically)
-                pcall(function()
-                    answerRemote:InvokeServer("NPCQuest_"..npc.area, cfg.QuestIndex, npc.folder)
-                    wait(0.4)
-                    answerRemote:InvokeServer("NPCQuest_"..npc.area, 2, npc.folder)
-                end)
+                doQuest(npc)
                 cfg.MobsKilled = 0
+                watchedMobs = {}
+                startWatchingMobs()
                 setStatus("✅ Quest done! Farming again...")
                 wait(0.5)
             end
-            questLoopRunning=false
+            questInProgress = false
             continue
         end
 
         -- Normal farm
         local target=getTarget()
-        if not target then setStatus("⚠️ No mob: "..cfg.TargetMob); continue end
+        if not target then
+            setStatus("⏳ Waiting for mobs... ("..cfg.MobsKilled.."/"..cfg.QuestTarget.." killed)")
+            continue
+        end
         local tHRP=target:FindFirstChild("HumanoidRootPart"); if not tHRP then continue end
         local dist=(hrp.Position-tHRP.Position).Magnitude
         if dist > 8 then
@@ -518,4 +528,4 @@ spawn(function()
     end
 end)
 
-print("✅ Dragon Blox GUI v12 Loaded!")
+print("✅ Dragon Blox GUI v13 Loaded!")
