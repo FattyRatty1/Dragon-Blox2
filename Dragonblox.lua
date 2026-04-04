@@ -7,7 +7,7 @@ local cfg = {
     AutoRebirth=false, AutoFarm=false,
     SpeedBoost=false, JumpBoost=false, AutoLockOn=false, SuperFlight=false,
     SpeedAmount=50, JumpAmount=80, FlightSpeed=50,
-    TargetMob="Atom X002 Army", World="3", QuestIndex=1,
+    TargetMob=nil, World="3", QuestIndex=1,
     MobsKilled=0, QuestTarget=5
 }
 
@@ -89,6 +89,7 @@ local function punch()
 end
 
 local function getNPCForMob(mobName)
+    if not mobName then return nil end
     for _, m in pairs(WORLDS[cfg.World].mobs) do
         if m.name == mobName then
             for _, n in pairs(WORLDS[cfg.World].npcs) do
@@ -96,7 +97,7 @@ local function getNPCForMob(mobName)
             end
         end
     end
-    return WORLDS[cfg.World].npcs[1]
+    return nil
 end
 
 local function teleportToPos(pos)
@@ -105,6 +106,7 @@ local function teleportToPos(pos)
 end
 
 local function getTarget()
+    if not cfg.TargetMob then return nil end
     local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
     if not hrp then return nil end
     local worldMobs = workspace:FindFirstChild("World Mobs")
@@ -128,27 +130,31 @@ local function getTarget()
     return closest
 end
 
-local function teleportToNPC(npc)
+local function getNPCModel(npc)
     local questFolder = workspace:FindFirstChild("Misc")
         and workspace.Misc:FindFirstChild("NPC")
         and workspace.Misc.NPC:FindFirstChild("Quest")
-    if questFolder then
-        local npcModel = questFolder:FindFirstChild(npc.folder)
-        if npcModel then
-            local npcHRP = npcModel:FindFirstChild("HumanoidRootPart", true)
-            if npcHRP then
-                teleportToPos(npcHRP.Position)
-                wait(0.5)
-            end
-        end
+    if not questFolder then return nil end
+    return questFolder:FindFirstChild(npc.folder)
+end
+
+local function teleportToNPC(npc)
+    local npcModel = getNPCModel(npc)
+    if not npcModel then return end
+    local npcHRP = npcModel:FindFirstChild("HumanoidRootPart", true)
+    if npcHRP then
+        teleportToPos(npcHRP.Position)
+        wait(0.5)
     end
 end
 
 local function doQuest(npc)
+    local npcModel = getNPCModel(npc)
+    if not npcModel then return end
     pcall(function()
-        answerRemote:InvokeServer("NPCQuest_"..npc.area, cfg.QuestIndex, npc.folder)
+        answerRemote:InvokeServer("NPCQuest_"..npc.area, cfg.QuestIndex, npcModel)
         wait(0.4)
-        answerRemote:InvokeServer("NPCQuest_"..npc.area, 2, npc.folder)
+        answerRemote:InvokeServer("NPCQuest_"..npc.area, 2, npcModel)
     end)
 end
 
@@ -161,7 +167,7 @@ local function watchMob(mob)
     if hum then
         hum.Died:Connect(function()
             watchedMobs[mob] = nil
-            if cfg.AutoFarm and mob.Name == cfg.TargetMob then
+            if cfg.AutoFarm and cfg.TargetMob and mob.Name == cfg.TargetMob then
                 cfg.MobsKilled = cfg.MobsKilled + 1
                 setStatus("⚔️ Killed "..cfg.MobsKilled.."/"..cfg.QuestTarget.." "..cfg.TargetMob)
             end
@@ -169,8 +175,8 @@ local function watchMob(mob)
     end
 end
 
--- Watch all existing and new mobs
 local function startWatchingMobs()
+    if not cfg.TargetMob then return end
     local worldMobs = workspace:FindFirstChild("World Mobs")
     if not worldMobs then return end
     for _, folder in pairs(worldMobs:GetChildren()) do
@@ -179,7 +185,7 @@ local function startWatchingMobs()
         end
         folder.ChildAdded:Connect(function(mob)
             if mob.Name == cfg.TargetMob then
-                wait(0.1) -- let humanoid load
+                wait(0.1)
                 watchMob(mob)
             end
         end)
@@ -223,7 +229,7 @@ Instance.new("UIListLayout",tabBar).FillDirection=Enum.FillDirection.Horizontal
 local tabs, tabPages = {}, {}
 local contentFrame = Instance.new("Frame"); contentFrame.Size=UDim2.new(1,0,1,-80); contentFrame.Position=UDim2.new(0,0,0,80); contentFrame.BackgroundTransparency=1; contentFrame.Parent=main
 
-local statusLabel = Instance.new("TextLabel"); statusLabel.Size=UDim2.new(1,-20,0,18); statusLabel.Position=UDim2.new(0,10,1,-24); statusLabel.BackgroundTransparency=1; statusLabel.TextColor3=Color3.fromRGB(100,200,100); statusLabel.Font=Enum.Font.Gotham; statusLabel.TextSize=11; statusLabel.TextXAlignment=Enum.TextXAlignment.Left; statusLabel.Text="✅ Loaded!"; statusLabel.Parent=main
+local statusLabel = Instance.new("TextLabel"); statusLabel.Size=UDim2.new(1,-20,0,18); statusLabel.Position=UDim2.new(0,10,1,-24); statusLabel.BackgroundTransparency=1; statusLabel.TextColor3=Color3.fromRGB(100,200,100); statusLabel.Font=Enum.Font.Gotham; statusLabel.TextSize=11; statusLabel.TextXAlignment=Enum.TextXAlignment.Left; statusLabel.Text="✅ Loaded! Select a mob to begin."; statusLabel.Parent=main
 local function setStatus(t) statusLabel.Text=t end
 
 for i=1,3 do
@@ -234,7 +240,7 @@ for i=1,3 do
     page.Visible=(i==1); page.Parent=contentFrame
     tabPages[i]=page
     local pad=Instance.new("UIPadding"); pad.PaddingLeft=UDim.new(0,12); pad.PaddingRight=UDim.new(0,12); pad.PaddingTop=UDim.new(0,10); pad.PaddingBottom=UDim.new(0,10); pad.Parent=page
-    Instance.new("UIListLayout",page).SortOrder=Enum.SortOrder.LayoutOrder
+    local layout=Instance.new("UIListLayout"); layout.SortOrder=Enum.SortOrder.LayoutOrder; layout.Padding=UDim.new(0,8); layout.Parent=page
 end
 
 local function switchTab(idx)
@@ -305,7 +311,15 @@ end
 -- ============================================================
 local p1 = tabPages[1]
 makeToggle(p1,"Auto Farm","⚔️","AutoFarm",
-    function() cfg.MobsKilled=0; startWatchingMobs() end,
+    function()
+        if not cfg.TargetMob then
+            cfg.AutoFarm=false
+            setStatus("⚠️ Select a mob first!")
+            return
+        end
+        cfg.MobsKilled=0
+        startWatchingMobs()
+    end,
     function() cfg.MobsKilled=0 end
 )
 makeDivider(p1)
@@ -321,7 +335,7 @@ makeDivider(p1)
 makeLabel(p1,"  ⚔️  Select Mob  →  Quest Auto-Handled")
 
 local mobListFrame=Instance.new("Frame"); mobListFrame.Size=UDim2.new(1,0,0,10); mobListFrame.AutomaticSize=Enum.AutomaticSize.Y; mobListFrame.BackgroundTransparency=1; mobListFrame.Parent=p1
-Instance.new("UIListLayout",mobListFrame).Padding=UDim.new(0,4)
+local mlLayout=Instance.new("UIListLayout"); mlLayout.SortOrder=Enum.SortOrder.LayoutOrder; mlLayout.Padding=UDim.new(0,4); mlLayout.Parent=mobListFrame
 local mobRows={}
 
 local function buildMobList()
@@ -329,7 +343,8 @@ local function buildMobList()
     mobRows={}
     for i,mob in pairs(WORLDS[cfg.World].mobs) do
         local row=Instance.new("TextButton")
-        row.Size=UDim2.new(1,0,0,38); row.BackgroundColor3=mob.name==cfg.TargetMob and GREEN or BTN
+        row.Size=UDim2.new(1,0,0,38)
+        row.BackgroundColor3=mob.name==cfg.TargetMob and GREEN or BTN
         row.BorderSizePixel=0; row.AutoButtonColor=false; row.LayoutOrder=i; row.Parent=mobListFrame
         Instance.new("UICorner",row).CornerRadius=UDim.new(0,8)
         local mName=Instance.new("TextLabel"); mName.Size=UDim2.new(1,-10,0.5,0); mName.Position=UDim2.new(0,10,0,0); mName.BackgroundTransparency=1; mName.TextColor3=Color3.new(1,1,1); mName.Font=Enum.Font.GothamBold; mName.TextSize=12; mName.TextXAlignment=Enum.TextXAlignment.Left; mName.Text=mob.name; mName.Parent=row
@@ -349,11 +364,11 @@ local function buildMobList()
 end
 
 local function switchWorld(w, btnOn, btnOff)
-    cfg.World=w; cfg.TargetMob=WORLDS[w].mobs[1].name; cfg.MobsKilled=0
+    cfg.World=w; cfg.TargetMob=nil; cfg.MobsKilled=0
     watchedMobs={}
     btnOn.BackgroundColor3=ACCENT; btnOn.TextColor3=Color3.new(1,1,1)
     btnOff.BackgroundColor3=BTN; btnOff.TextColor3=TEXT
-    buildMobList(); setStatus("Switched to World "..w)
+    buildMobList(); setStatus("Switched to World "..w.." — select a mob")
 end
 
 wbA.MouseButton1Click:Connect(function() switchWorld("1",wbA,wbB) end)
@@ -485,15 +500,14 @@ spawn(function()
     end
 end)
 
--- Main farm + quest loop (quest built into farm, no separate toggle)
+-- Main farm + quest loop
 local questInProgress = false
 spawn(function()
     while true do wait(0.15)
-        if not cfg.AutoFarm then questInProgress=false; continue end
+        if not cfg.AutoFarm or not cfg.TargetMob then questInProgress=false; continue end
         local char=player.Character; if not char then continue end
         local hrp=char:FindFirstChild("HumanoidRootPart"); if not hrp then continue end
 
-        -- Quest turn-in when kill target reached
         if cfg.MobsKilled >= cfg.QuestTarget and not questInProgress then
             questInProgress = true
             local npc = getNPCForMob(cfg.TargetMob)
@@ -511,7 +525,6 @@ spawn(function()
             continue
         end
 
-        -- Normal farm
         local target=getTarget()
         if not target then
             setStatus("⏳ Waiting for mobs... ("..cfg.MobsKilled.."/"..cfg.QuestTarget.." killed)")
